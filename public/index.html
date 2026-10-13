@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Item & Purchase Management</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; margin: 0; background: #f4f6f8; color: #222; }
+  header { background: #1f3a5f; padding: 12px 20px; }
+  header h1 { color: #fff; font-size: 18px; margin: 0 0 8px; }
+  nav button { background: #2d527f; color: #fff; border: 0; padding: 8px 14px; margin: 2px 4px 2px 0; border-radius: 4px; cursor: pointer; }
+  nav button.active { background: #fff; color: #1f3a5f; font-weight: bold; }
+  main { max-width: 1000px; margin: 20px auto; padding: 0 15px; }
+  .card { background: #fff; padding: 16px; border-radius: 6px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  h2 { margin: 0 0 12px; font-size: 18px; }
+  label { display: block; font-size: 13px; font-weight: bold; margin: 10px 0 4px; }
+  input, select { padding: 8px; width: 100%; max-width: 320px; border: 1px solid #bbb; border-radius: 4px; }
+  input[type=checkbox] { width: auto; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  button.btn { background: #1f6feb; color: #fff; border: 0; padding: 8px 14px; border-radius: 4px; cursor: pointer; margin-top: 12px; }
+  button.sm { padding: 4px 8px; font-size: 12px; margin: 1px; border: 1px solid #888; background: #fff; border-radius: 3px; cursor: pointer; }
+  button.danger { color: #b00020; border-color: #b00020; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  th { background: #eef1f5; }
+  .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; color: #fff; white-space: nowrap; }
+  .In-Stock, .Active { background: #2e9e4f; }
+  .Low-Stock { background: #e0901a; }
+  .Out-of-Stock, .Inactive { background: #c0392b; }
+  #msg { display: none; padding: 10px 14px; border-radius: 4px; margin-bottom: 14px; }
+  #msg.err { background: #fde8e8; color: #9b1c1c; border: 1px solid #f5b5b5; }
+  #msg.ok { background: #e3f6e8; color: #1d6b34; border: 1px solid #a9deb8; }
+  .muted { color: #666; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Item & Purchase Management</h1>
+  <nav id="nav">
+    <button data-view="types">Item Types</button>
+    <button data-view="items">Items</button>
+    <button data-view="purchase">New Purchase</button>
+    <button data-view="purchases">Purchases</button>
+    <button data-view="stock">Stock</button>
+  </nav>
+</header>
+
+<main>
+  <div id="msg"></div>
+
+  <!-- ITEM TYPES -->
+  <section class="view" id="v-types" hidden>
+    <div class="card">
+      <h2>Add Item Type</h2>
+      <label for="typeName">Type name *</label>
+      <input id="typeName" placeholder="e.g. Electronics">
+      <br><button class="btn" onclick="run(addType)">Add</button>
+    </div>
+    <div class="card"><h2>Item Types</h2><div class="table-wrap"><table id="typesTable"></table></div></div>
+  </section>
+
+  <!-- ITEMS -->
+  <section class="view" id="v-items" hidden>
+    <div class="card">
+      <h2 id="itemFormTitle">Add Item</h2>
+      <input type="hidden" id="itemId">
+      <div class="row">
+        <div><label for="itemName">Item Name *</label><input id="itemName"></div>
+        <div><label for="itemType">Item Type *</label><select id="itemType"></select></div>
+        <div><label for="itemDate">Purchase Date *</label><input type="date" id="itemDate"></div>
+        <div><label for="itemStock">Stock Available *</label><input type="number" id="itemStock" min="0" step="1"></div>
+        <div><label for="itemActive">Status *</label>
+          <select id="itemActive"><option value="true">Active</option><option value="false">Inactive</option></select></div>
+      </div>
+      <button class="btn" onclick="run(saveItem)">Save</button>
+      <button class="btn" style="background:#777" onclick="resetItemForm()">Clear</button>
+    </div>
+    <div class="card" id="itemDetails" hidden></div>
+    <div class="card"><h2>Items</h2><div class="table-wrap"><table id="itemsTable"></table></div></div>
+  </section>
+
+  <!-- NEW / EDIT PURCHASE -->
+  <section class="view" id="v-purchase" hidden>
+    <div class="card">
+      <h2 id="purchaseTitle">New Purchase</h2>
+      <p class="muted" id="orderHint">The Order ID (e.g. PO-00001) is generated automatically on save.</p>
+      <label for="pDate">Purchase Date *</label><input type="date" id="pDate">
+      <div class="row">
+        <div><label for="pItem">Item</label><select id="pItem"></select></div>
+        <div><label for="pQty">Quantity</label><input type="number" id="pQty" min="1" step="1" value="1"></div>
+        <button class="btn" onclick="addLine()">Add to Order</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Order Lines</h2>
+      <div class="table-wrap"><table id="linesTable"></table></div>
+      <button class="btn" onclick="run(submitPurchase)">Submit Purchase</button>
+      <button class="btn" style="background:#777" onclick="resetPurchaseForm()">Clear</button>
+    </div>
+  </section>
+
+  <!-- PURCHASE LIST + DETAILS -->
+  <section class="view" id="v-purchases" hidden>
+    <div class="card" id="purchaseDetails" hidden></div>
+    <div class="card"><h2>Purchases</h2><div class="table-wrap"><table id="purchasesTable"></table></div></div>
+  </section>
+
+  <!-- STOCK -->
+  <section class="view" id="v-stock" hidden>
+    <div class="card"><h2>Stock / Availability</h2>
+      <p class="muted">In Stock: more than 5 &middot; Low Stock: 5 or fewer &middot; Out of Stock: 0</p>
+      <div class="table-wrap"><table id="stockTable"></table></div></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const cls = (s) => s.replace(/ /g, '-');
+
+let types = [], items = [], lines = [], editingPurchase = null;
+
+async function api(path, method = 'GET', body) {
+  const res = await fetch('/api' + path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+function msg(text, ok = false) {
+  const m = $('msg');
+  m.textContent = text;
+  m.className = ok ? 'ok' : 'err';
+  m.style.display = 'block';
+  clearTimeout(msg.t);
+  msg.t = setTimeout(() => (m.style.display = 'none'), 6000);
+}
+async function run(fn) { try { await fn(); } catch (e) { msg(e.message); } }
+
+// ---------- navigation ----------
+function show(view) {
+  document.querySelectorAll('.view').forEach((v) => (v.hidden = v.id !== 'v-' + view));
+  document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  run(async () => {
+    if (view === 'types') await loadTypes();
+    if (view === 'items' || view === 'stock') { await loadTypes(); await loadItems(); }
+    if (view === 'purchase') { await loadItems(); renderLines(); }
+    if (view === 'purchases') await loadPurchases();
+  });
+}
+$('nav').addEventListener('click', (e) => { if (e.target.dataset.view) show(e.target.dataset.view); });
+
+// ---------- item types ----------
+async function loadTypes() {
+  types = await api('/item-types');
+  $('typesTable').innerHTML = '<tr><th>ID</th><th>Type Name</th><th>Actions</th></tr>' +
+    (types.map((t) => `<tr><td>${t.id}</td><td>${esc(t.type_name)}</td><td>
+      <button class="sm" onclick="run(() => renameType(${t.id}))">Rename</button>
+      <button class="sm danger" onclick="run(() => deleteType(${t.id}))">Delete</button></td></tr>`).join('')
+      || '<tr><td colspan="3">No item types yet</td></tr>');
+  $('itemType').innerHTML = '<option value="">-- select --</option>' +
+    types.map((t) => `<option value="${t.id}">${esc(t.type_name)}</option>`).join('');
+}
+async function addType() {
+  await api('/item-types', 'POST', { type_name: $('typeName').value });
+  $('typeName').value = '';
+  msg('Item type added', true);
+  await loadTypes();
+}
+async function renameType(id) {
+  const cur = types.find((t) => t.id === id);
+  const name = prompt('New name', cur.type_name);
+  if (name === null) return;
+  await api('/item-types/' + id, 'PUT', { type_name: name });
+  msg('Item type updated', true);
+  await loadTypes();
+}
+async function deleteType(id) {
+  if (!confirm('Delete this item type?')) return;
+  await api('/item-types/' + id, 'DELETE');
+  msg('Item type deleted', true);
+  await loadTypes();
+}
+
+// ---------- items ----------
+const statusBadge = (a) => `<span class="badge ${a ? 'Active' : 'Inactive'}">${a ? 'Active' : 'Inactive'}</span>`;
+const availBadge = (a) => `<span class="badge ${cls(a)}">${a}</span>`;
+
+async function loadItems() {
+  items = await api('/items');
+  $('itemsTable').innerHTML =
+    '<tr><th>ID</th><th>Name</th><th>Type</th><th>Purchase Date</th><th>Stock</th><th>Availability</th><th>Status</th><th>Actions</th></tr>' +
+    (items.map((i) => `<tr><td>${i.id}</td><td>${esc(i.name)}</td><td>${esc(i.type_name)}</td><td>${i.purchase_date}</td>
+      <td>${i.stock_available}</td><td>${availBadge(i.availability)}</td><td>${statusBadge(i.active)}</td><td>
+      <button class="sm" onclick="run(() => viewItem(${i.id}))">View</button>
+      <button class="sm" onclick="editItem(${i.id})">Edit</button>
+      <button class="sm" onclick="run(() => toggleItem(${i.id}))">${i.active ? 'Deactivate' : 'Activate'}</button>
+      <button class="sm danger" onclick="run(() => deleteItem(${i.id}))">Delete</button></td></tr>`).join('')
+      || '<tr><td colspan="8">No items yet</td></tr>');
+
+  $('stockTable').innerHTML = '<tr><th>Item</th><th>Type</th><th>Current Stock</th><th>Availability</th><th>Status</th></tr>' +
+    items.map((i) => `<tr><td>${esc(i.name)}</td><td>${esc(i.type_name)}</td><td>${i.stock_available}</td>
+      <td>${availBadge(i.availability)}</td><td>${statusBadge(i.active)}</td></tr>`).join('');
+
+  // only active items can be picked for a purchase
+  $('pItem').innerHTML = items.filter((i) => i.active).map((i) =>
+    `<option value="${i.id}">${esc(i.name)} (stock ${i.stock_available})</option>`).join('');
+}
+
+async function saveItem() {
+  const id = $('itemId').value;
+  const body = {
+    name: $('itemName').value,
+    item_type_id: $('itemType').value,
+    purchase_date: $('itemDate').value,
+    stock_available: $('itemStock').value,
+    active: $('itemActive').value === 'true',
+  };
+  await api(id ? '/items/' + id : '/items', id ? 'PUT' : 'POST', body);
+  msg(id ? 'Item updated' : 'Item created', true);
+  resetItemForm();
+  await loadItems();
+}
+function resetItemForm() {
+  ['itemId', 'itemName', 'itemType', 'itemDate', 'itemStock'].forEach((f) => ($(f).value = ''));
+  $('itemActive').value = 'true';
+  $('itemFormTitle').textContent = 'Add Item';
+}
+function editItem(id) {
+  const i = items.find((x) => x.id === id);
+  $('itemId').value = i.id;
+  $('itemName').value = i.name;
+  $('itemType').value = i.item_type_id;
+  $('itemDate').value = i.purchase_date;
+  $('itemStock').value = i.stock_available;
+  $('itemActive').value = String(i.active);
+  $('itemFormTitle').textContent = 'Edit Item #' + i.id;
+  window.scrollTo(0, 0);
+}
+async function viewItem(id) {
+  const i = await api('/items/' + id);
+  const d = $('itemDetails');
+  d.hidden = false;
+  d.innerHTML = `<h2>Item Details</h2>
+    <p><b>ID:</b> ${i.id}<br><b>Name:</b> ${esc(i.name)}<br><b>Type:</b> ${esc(i.type_name)}<br>
+    <b>Purchase Date:</b> ${i.purchase_date}<br><b>Current Stock:</b> ${i.stock_available}<br>
+    <b>Availability:</b> ${availBadge(i.availability)}<br><b>Status:</b> ${statusBadge(i.active)}</p>
+    <button class="sm" onclick="$('itemDetails').hidden = true">Close</button>`;
+  window.scrollTo(0, 0);
+}
+async function toggleItem(id) {
+  const i = items.find((x) => x.id === id);
+  await api('/items/' + id, 'PUT', {
+    name: i.name, item_type_id: i.item_type_id, purchase_date: i.purchase_date,
+    stock_available: i.stock_available, active: !i.active,
+  });
+  msg(`Item ${i.active ? 'deactivated' : 'activated'}`, true);
+  await loadItems();
+}
+async function deleteItem(id) {
+  if (!confirm('Delete this item?')) return;
+  await api('/items/' + id, 'DELETE');
+  msg('Item deleted', true);
+  await loadItems();
+}
+
+// ---------- purchase form ----------
+function renderLines() {
+  $('linesTable').innerHTML = '<tr><th>Item</th><th>Quantity</th><th></th></tr>' +
+    (lines.map((l, idx) => `<tr><td>${esc(l.item_name)}</td><td>${l.quantity}</td>
+      <td><button class="sm danger" onclick="removeLine(${idx})">Remove</button></td></tr>`).join('')
+      || '<tr><td colspan="3">No items added yet</td></tr>');
+}
+function addLine() {
+  const itemId = Number($('pItem').value);
+  const qty = Number($('pQty').value);
+  if (!itemId) return msg('Select an item');
+  if (!Number.isInteger(qty) || qty <= 0) return msg('Quantity must be greater than zero');
+  const existing = lines.find((l) => l.item_id === itemId);
+  if (existing) existing.quantity += qty; // same item twice -> merge into one line
+  else lines.push({ item_id: itemId, item_name: items.find((i) => i.id === itemId).name, quantity: qty });
+  $('pQty').value = 1;
+  renderLines();
+}
+function removeLine(idx) { lines.splice(idx, 1); renderLines(); }
+
+async function submitPurchase() {
+  const body = {
+    purchase_date: $('pDate').value,
+    items: lines.map((l) => ({ item_id: l.item_id, quantity: l.quantity })),
+  };
+  const p = await api(editingPurchase ? '/purchases/' + editingPurchase : '/purchases',
+    editingPurchase ? 'PUT' : 'POST', body);
+  msg(`Purchase ${p.order_id} saved`, true);
+  resetPurchaseForm();
+  show('purchases');
+  await viewPurchase(p.id);
+}
+function resetPurchaseForm() {
+  lines = [];
+  editingPurchase = null;
+  $('pDate').value = new Date().toISOString().slice(0, 10);
+  $('purchaseTitle').textContent = 'New Purchase';
+  $('orderHint').textContent = 'The Order ID (e.g. PO-00001) is generated automatically on save.';
+  renderLines();
+}
+
+// ---------- purchase list / details ----------
+async function loadPurchases() {
+  const rows = await api('/purchases');
+  // no Delete button for purchases - they are history
+  $('purchasesTable').innerHTML = '<tr><th>Order ID</th><th>Date</th><th>Lines</th><th>Total Qty</th><th>Actions</th></tr>' +
+    (rows.map((p) => `<tr><td>${esc(p.order_id)}</td><td>${p.purchase_date}</td><td>${p.item_count}</td><td>${p.total_quantity}</td><td>
+      <button class="sm" onclick="run(() => viewPurchase(${p.id}))">View</button>
+      <button class="sm" onclick="run(() => editPurchase(${p.id}))">Update</button></td></tr>`).join('')
+      || '<tr><td colspan="5">No purchases yet</td></tr>');
+}
+async function viewPurchase(id) {
+  const p = await api('/purchases/' + id);
+  const d = $('purchaseDetails');
+  d.hidden = false;
+  d.innerHTML = `<h2>Purchase Details</h2><p><b>Order ID:</b> ${esc(p.order_id)}<br><b>Purchase Date:</b> ${p.purchase_date}</p>
+    <div class="table-wrap"><table><tr><th>Item</th><th>Type</th><th>Quantity</th><th>Current Stock</th><th>Item Status</th></tr>` +
+    p.items.map((i) => `<tr><td>${esc(i.item_name)}</td><td>${esc(i.type_name)}</td><td>${i.quantity}</td>
+      <td>${i.stock_available}</td><td>${statusBadge(i.active)}</td></tr>`).join('') +
+    `</table></div><button class="sm" onclick="$('purchaseDetails').hidden = true">Close</button>`;
+  window.scrollTo(0, 0);
+}
+async function editPurchase(id) {
+  const p = await api('/purchases/' + id);
+  await loadItems();
+  lines = p.items.map((i) => ({ item_id: i.item_id, item_name: i.item_name, quantity: i.quantity }));
+  editingPurchase = id;
+  show('purchase');
+  $('pDate').value = p.purchase_date;
+  $('purchaseTitle').textContent = 'Update Purchase ' + p.order_id;
+  $('orderHint').textContent = 'Changing quantities adjusts stock by the difference.';
+  renderLines();
+}
+
+// ---------- start ----------
+resetPurchaseForm();
+show('items');
+</script>
+</body>
+</html>
